@@ -1,12 +1,11 @@
-# 필요한 라이브러리 임포트
-import pyrealsense2 as rs
 import cv2
+import numpy as np
 import torch
+import pyrealsense2 as rs
 from ultralytics.yolo.engine.predictor import BasePredictor
 from ultralytics.yolo.engine.results import Results
-from ultralytics.yolo.utils import DEFAULT_CFG, ROOT, ops
-from ultralytics.yolo.utils.plotting import Annotator, colors, save_one_box
-import numpy as np
+from ultralytics.yolo.utils import ops
+from ultralytics.yolo.utils.plotting import Annotator, colors
 
 # RealSense Depth Camera 초기화 함수
 def init_realsense():
@@ -24,7 +23,7 @@ def get_depth_info(depth_frame, bbox):
     depth = depth_frame.get_distance(x_center, y_center)
     return x_center, y_center, depth
 
-# YOLOv8 기반 객체 탐지 및 깊이 정보 추출 클래스
+# YOLOv8 객체 탐지 및 깊이 정보 추출 클래스
 class DepthDetectionPredictor(BasePredictor):
     def get_annotator(self, img):
         return Annotator(img, line_width=self.args.line_thickness, example=str(self.model.names))
@@ -80,6 +79,16 @@ def main():
     # RealSense 초기화
     pipeline, profile = init_realsense()
 
+    # YOLOv8 모델 로드
+    model_path = "/home/jongseol/Jetson-Nano2/V8/yolov8n.pt"  # 모델 파일 경로 수정
+    model = torch.hub.load('ultralytics/yolov8', 'yolov8n', path=model_path)  # yolov8n.pt 파일 로드
+    predictor = DepthDetectionPredictor()
+    predictor.model = model
+    predictor.args = argparse.Namespace(line_thickness=2, conf=0.25, iou=0.45, agnostic_nms=False, max_det=1000, classes=None)
+    predictor.source_type = type('source_type', (), {})()
+    predictor.source_type.webcam = True
+    predictor.source_type.from_img = False
+
     try:
         while True:
             # RealSense 프레임 가져오기
@@ -94,13 +103,6 @@ def main():
             depth_image = np.asanyarray(depth_frame.get_data())
 
             # YOLOv8 객체 탐지
-            predictor = DepthDetectionPredictor()
-            predictor.model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
-            predictor.args = argparse.Namespace(line_thickness=2, conf=0.25, iou=0.45, agnostic_nms=False, max_det=1000, classes=None)
-            predictor.source_type = type('source_type', (), {})()
-            predictor.source_type.webcam = True
-            predictor.source_type.from_img = False
-
             preds = predictor(color_image)
             predictor.write_results(0, preds, (None, color_image, color_image, depth_frame))
 
